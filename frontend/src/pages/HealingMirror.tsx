@@ -22,9 +22,6 @@ export default function HealingMirror() {
 
   const generateInsights = (text: string, emotions: any, distortions: string[]): MirrorInsight[] => {
     const insights: MirrorInsight[] = [];
-
-    // Analyze based on primary emotion and distortions
-    const primaryEmotion = emotions.primary_emotion;
     
     // Pattern 1: Emotional Triggers
     if (emotions.anxiety > 0.5 || emotions.stress_score > 60) {

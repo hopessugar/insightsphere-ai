@@ -50,12 +50,6 @@ What would you like to explore today? What emotion or pattern have you been avoi
     setIsLoading(true);
 
     try {
-      // Add shadow work context to the conversation
-      const shadowContext = {
-        mode: 'shadow_work',
-        instruction: 'Act as the user\'s shadow self - their subconscious. Ask deep, probing questions about fears, insecurities, and hidden emotions. Help them recognize patterns. Be direct but compassionate. Challenge their defenses gently.',
-      };
-
       const conversationHistory = messages.slice(-8).map((msg) => ({
         role: msg.role,
         content: msg.content,
@@ -63,8 +57,7 @@ What would you like to explore today? What emotion or pattern have you been avoi
 
       const response = await sendChatMessage(
         inputMessage,
-        conversationHistory,
-        shadowContext
+        conversationHistory
       );
 
       const assistantMessage: ChatMessage = {
