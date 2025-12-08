@@ -24,7 +24,7 @@ class MoodLogRepository:
     @property
     def collection(self):
         """Get mood logs collection"""
-        return db_manager.db[self.collection_name]
+        return db_manager.get_collection(self.collection_name)
     
     async def create_mood_log(
         self,

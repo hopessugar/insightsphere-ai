@@ -17,26 +17,56 @@ function App() {
   return (
     <AuthProvider>
       <Router>
-        <Layout>
-          <Routes>
-            {/* Public routes */}
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
-            
-            {/* Protected routes - require authentication */}
-            <Route path="/" element={<ProtectedRoute><Home /></ProtectedRoute>} />
-            <Route path="/wellness-plan" element={<ProtectedRoute><WellnessPlan /></ProtectedRoute>} />
-            <Route path="/insights" element={<ProtectedRoute><Insights /></ProtectedRoute>} />
-            <Route path="/chat" element={<ProtectedRoute><TherapyChat /></ProtectedRoute>} />
-            <Route path="/shadow-work" element={<ProtectedRoute><ShadowWork /></ProtectedRoute>} />
-            <Route path="/recipes" element={<ProtectedRoute><EmotionalRecipes /></ProtectedRoute>} />
-            <Route path="/mirror" element={<ProtectedRoute><HealingMirror /></ProtectedRoute>} />
-            <Route path="/about" element={<ProtectedRoute><About /></ProtectedRoute>} />
-            
-            {/* Catch all - redirect to login */}
-            <Route path="*" element={<Navigate to="/login" replace />} />
-          </Routes>
-        </Layout>
+        <Routes>
+          {/* Public routes - no layout */}
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          
+          {/* Protected routes with layout */}
+          <Route path="/" element={
+            <ProtectedRoute>
+              <Layout><Home /></Layout>
+            </ProtectedRoute>
+          } />
+          <Route path="/wellness-plan" element={
+            <ProtectedRoute>
+              <Layout><WellnessPlan /></Layout>
+            </ProtectedRoute>
+          } />
+          <Route path="/insights" element={
+            <ProtectedRoute>
+              <Layout><Insights /></Layout>
+            </ProtectedRoute>
+          } />
+          <Route path="/chat" element={
+            <ProtectedRoute>
+              <Layout><TherapyChat /></Layout>
+            </ProtectedRoute>
+          } />
+          <Route path="/shadow-work" element={
+            <ProtectedRoute>
+              <Layout><ShadowWork /></Layout>
+            </ProtectedRoute>
+          } />
+          <Route path="/recipes" element={
+            <ProtectedRoute>
+              <Layout><EmotionalRecipes /></Layout>
+            </ProtectedRoute>
+          } />
+          <Route path="/mirror" element={
+            <ProtectedRoute>
+              <Layout><HealingMirror /></Layout>
+            </ProtectedRoute>
+          } />
+          <Route path="/about" element={
+            <ProtectedRoute>
+              <Layout><About /></Layout>
+            </ProtectedRoute>
+          } />
+          
+          {/* Catch all - redirect to login */}
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
       </Router>
     </AuthProvider>
   )

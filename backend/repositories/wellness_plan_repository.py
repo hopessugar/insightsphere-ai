@@ -20,7 +20,7 @@ class WellnessPlanRepository:
     
     @property
     def collection(self):
-        return db_manager.db[self.collection_name]
+        return db_manager.get_collection(self.collection_name)
     
     async def create_wellness_plan(
         self,
