@@ -52,38 +52,120 @@ export default function Insights() {
   const [quickMeditation, setQuickMeditation] = useState(false);
   const [quickNotes, setQuickNotes] = useState('');
 
-  // Load mood entries from localStorage
-  useEffect(() => {
-    const stored = localStorage.getItem('moodEntries');
-    if (stored) {
-      setMoodEntries(JSON.parse(stored));
-    }
-  }, []);
+  const [isLoadingEntries, setIsLoadingEntries] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
 
-  // Save mood entries to localStorage
-  const saveMoodEntry = () => {
-    const newEntry: MoodEntry = {
-      id: Date.now().toString(),
-      date: new Date().toISOString().split('T')[0],
-      timestamp: Date.now(),
-      mood: quickMood,
-      energy: quickEnergy,
-      anxiety: quickAnxiety,
-      sleep: quickSleep,
-      exercise: quickExercise,
-      social: quickSocial,
-      meditation: quickMeditation,
-      notes: quickNotes,
-      symptoms: []
+  // Load mood entries from database
+  useEffect(() => {
+    const loadMoodEntries = async () => {
+      try {
+        const token = localStorage.getItem('auth_token');
+        if (!token) {
+          setIsLoadingEntries(false);
+          return;
+        }
+
+        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+        const response = await fetch(`${API_URL}/api/mood-logs?limit=100`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          // Transform API data to match MoodEntry interface
+          const transformedEntries: MoodEntry[] = data.mood_logs.map((log: any) => ({
+            id: log._id,
+            date: log.date,
+            timestamp: new Date(log.created_at).getTime(),
+            mood: log.mood,
+            energy: log.energy,
+            anxiety: log.anxiety,
+            sleep: log.sleep,
+            exercise: log.activities.exercise,
+            social: log.activities.social,
+            meditation: log.activities.meditation,
+            notes: log.notes || '',
+            symptoms: []
+          }));
+          setMoodEntries(transformedEntries);
+        }
+      } catch (error) {
+        console.error('Failed to load mood entries:', error);
+      } finally {
+        setIsLoadingEntries(false);
+      }
     };
 
-    const updated = [newEntry, ...moodEntries];
-    setMoodEntries(updated);
-    localStorage.setItem('moodEntries', JSON.stringify(updated));
-    
-    // Reset form
-    setShowQuickLog(false);
-    setQuickNotes('');
+    loadMoodEntries();
+  }, []);
+
+  // Save mood entry to database
+  const saveMoodEntry = async () => {
+    try {
+      setIsSaving(true);
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        alert('Please log in to save mood entries');
+        return;
+      }
+
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const response = await fetch(`${API_URL}/api/mood-logs`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          date: new Date().toISOString().split('T')[0],
+          mood: quickMood,
+          energy: quickEnergy,
+          anxiety: quickAnxiety,
+          sleep: quickSleep,
+          activities: {
+            exercise: quickExercise,
+            social: quickSocial,
+            meditation: quickMeditation
+          },
+          notes: quickNotes
+        }),
+      });
+
+      if (response.ok) {
+        const savedLog = await response.json();
+        // Transform and add to local state
+        const newEntry: MoodEntry = {
+          id: savedLog._id,
+          date: savedLog.date,
+          timestamp: new Date(savedLog.created_at).getTime(),
+          mood: savedLog.mood,
+          energy: savedLog.energy,
+          anxiety: savedLog.anxiety,
+          sleep: savedLog.sleep,
+          exercise: savedLog.activities.exercise,
+          social: savedLog.activities.social,
+          meditation: savedLog.activities.meditation,
+          notes: savedLog.notes || '',
+          symptoms: []
+        };
+
+        setMoodEntries([newEntry, ...moodEntries]);
+        
+        // Reset form
+        setShowQuickLog(false);
+        setQuickNotes('');
+      } else {
+        const error = await response.json();
+        alert(`Failed to save mood entry: ${error.detail || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Failed to save mood entry:', error);
+      alert('Failed to save mood entry. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // Calculate statistics
@@ -463,10 +545,20 @@ export default function Insights() {
                   </Button>
                   <Button
                     onClick={saveMoodEntry}
+                    disabled={isSaving}
                     className="flex-1 bg-gradient-to-r from-cyan-500 to-blue-600"
                   >
-                    <CheckCircle2 className="w-5 h-5 mr-2" />
-                    Save Entry
+                    {isSaving ? (
+                      <>
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-5 h-5 mr-2" />
+                        Save Entry
+                      </>
+                    )}
                   </Button>
                 </div>
               </div>
@@ -476,6 +568,18 @@ export default function Insights() {
       )}
     </AnimatePresence>
   );
+
+  // Loading state
+  if (isLoadingEntries) {
+    return (
+      <div className="min-h-screen pt-20 pb-12 px-4 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto"></div>
+          <p className="mt-4 text-gray-400">Loading your insights...</p>
+        </div>
+      </div>
+    );
+  }
 
   // Empty state
   if (moodEntries.length === 0) {
@@ -611,6 +715,99 @@ export default function Insights() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
             >
+              {/* Personalized Profile Summary */}
+              <Card className="p-8 mb-8 bg-gradient-to-br from-purple-500/10 via-blue-500/10 to-cyan-500/10 border-purple-500/30">
+                <div className="flex items-start justify-between mb-6">
+                  <div>
+                    <h2 className="text-3xl font-bold mb-2">Your Mental Health Journey</h2>
+                    <p className="text-gray-300">Tracking since {new Date(moodEntries[moodEntries.length - 1]?.timestamp || Date.now()).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</p>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm text-gray-400">Total Entries</div>
+                    <div className="text-4xl font-bold text-purple-400">{stats.totalEntries}</div>
+                  </div>
+                </div>
+
+                <div className="grid md:grid-cols-3 gap-6">
+                  <div className="p-4 bg-white/5 rounded-xl">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+                        <Activity className="w-5 h-5 text-cyan-400" />
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-400">Last 7 Days</div>
+                        <div className="text-2xl font-bold">{stats.last7Days} entries</div>
+                      </div>
+                    </div>
+                    <p className="text-sm text-gray-400">
+                      {stats.last7Days === 7 ? '🎉 Perfect week!' : stats.last7Days >= 5 ? '✨ Great consistency!' : '💪 Keep it up!'}
+                    </p>
+                  </div>
+
+                  <div className="p-4 bg-white/5 rounded-xl">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                        <Calendar className="w-5 h-5 text-blue-400" />
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-400">Last 30 Days</div>
+                        <div className="text-2xl font-bold">{stats.last30Days} entries</div>
+                      </div>
+                    </div>
+                    <p className="text-sm text-gray-400">
+                      {Math.round((stats.last30Days / 30) * 100)}% completion rate
+                    </p>
+                  </div>
+
+                  <div className="p-4 bg-white/5 rounded-xl">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                        <TrendingUp className="w-5 h-5 text-purple-400" />
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-400">Overall Trend</div>
+                        <div className="text-2xl font-bold">
+                          {parseFloat(stats.moodChange) > 0 ? '📈 Improving' : parseFloat(stats.moodChange) < 0 ? '📉 Declining' : '➡️ Stable'}
+                        </div>
+                      </div>
+                    </div>
+                    <p className="text-sm text-gray-400">
+                      {parseFloat(stats.moodChange) > 0 
+                        ? `+${stats.moodChange} points vs last week` 
+                        : parseFloat(stats.moodChange) < 0 
+                        ? `${stats.moodChange} points vs last week`
+                        : 'Maintaining current levels'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Quick Insights */}
+                <div className="mt-6 p-4 bg-white/5 rounded-xl">
+                  <h3 className="font-bold mb-3 flex items-center gap-2">
+                    <Brain className="w-5 h-5 text-purple-400" />
+                    Quick Insights
+                  </h3>
+                  <div className="grid md:grid-cols-2 gap-3 text-sm">
+                    <div className="flex items-center gap-2">
+                      <Smile className="w-4 h-4 text-cyan-400" />
+                      <span>Your average mood is <strong>{stats.avgMood}/10</strong> {MOOD_EMOJIS[Math.round(parseFloat(stats.avgMood))]}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Zap className="w-4 h-4 text-yellow-400" />
+                      <span>Energy levels at <strong>{stats.avgEnergy}/10</strong></span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Dumbbell className="w-4 h-4 text-green-400" />
+                      <span>Exercised <strong>{stats.exerciseCount}</strong> times this week</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Moon className="w-4 h-4 text-purple-400" />
+                      <span>Sleep quality at <strong>{stats.avgSleep}/10</strong></span>
+                    </div>
+                  </div>
+                </div>
+              </Card>
+
               {/* Wellness Score & Streak */}
               <div className="grid md:grid-cols-2 gap-6 mb-8">
                 <Card className="p-8 bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border-cyan-500/30">

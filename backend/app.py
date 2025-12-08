@@ -5,7 +5,7 @@ This is the main application file that sets up the FastAPI server,
 configures CORS, and defines API endpoints for text analysis.
 """
 
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import os
@@ -16,6 +16,13 @@ from schemas.analysis import AnalysisRequest, AnalysisResponse, ErrorResponse, C
 from core.models_nlp import TextAnalyzer
 from core.suggestions import SuggestionGenerator
 from core.ai_therapist import AITherapist
+from core.dependencies import get_current_user, get_current_user_id
+from models.user import UserInDB
+from database import init_database, close_database
+from routes import auth_router
+from routes.mood_logs import router as mood_logs_router
+from routes.wellness_plans import router as wellness_plans_router
+from routes.chat_history import router as chat_history_router
 
 # Load environment variables
 load_dotenv()
@@ -53,7 +60,45 @@ text_analyzer = TextAnalyzer()
 suggestion_generator = SuggestionGenerator()
 ai_therapist = AITherapist()
 
+# Include routers
+app.include_router(auth_router)
+app.include_router(mood_logs_router)
+app.include_router(wellness_plans_router)
+app.include_router(chat_history_router)
+
 logger.info("InsightSphere AI backend initialized successfully")
+
+
+@app.on_event("startup")
+async def startup_event():
+    """
+    Application startup event handler.
+    
+    Initializes database connection and creates indexes.
+    """
+    logger.info("Starting up application...")
+    try:
+        await init_database()
+        logger.info("✅ Database initialized successfully")
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize database: {str(e)}")
+        # Don't prevent startup - allow app to run without database for now
+        logger.warning("⚠️  Application starting without database connection")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """
+    Application shutdown event handler.
+    
+    Closes database connection gracefully.
+    """
+    logger.info("Shutting down application...")
+    try:
+        await close_database()
+        logger.info("✅ Database connection closed successfully")
+    except Exception as e:
+        logger.error(f"Error closing database: {str(e)}")
 
 
 @app.get("/", tags=["Health"])
@@ -82,6 +127,10 @@ async def root():
             "description": "Successful analysis",
             "model": AnalysisResponse
         },
+        401: {
+            "description": "Unauthorized - Invalid or missing token",
+            "model": ErrorResponse
+        },
         422: {
             "description": "Validation error",
             "model": ErrorResponse
@@ -92,7 +141,10 @@ async def root():
         }
     }
 )
-async def analyze_text(request: AnalysisRequest):
+async def analyze_text(
+    request: AnalysisRequest,
+    user_id: str = Depends(get_current_user_id)
+):
     """
     Analyze user text for emotions, stress levels, and cognitive patterns.
     
@@ -113,7 +165,7 @@ async def analyze_text(request: AnalysisRequest):
         HTTPException: 422 for validation errors, 500 for processing errors
     """
     try:
-        logger.info(f"Received analysis request (text length: {len(request.text)} chars)")
+        logger.info(f"Received analysis request from user {user_id} (text length: {len(request.text)} chars)")
         
         # Perform NLP analysis
         analysis_result = text_analyzer.analyze_text(request.text)
@@ -166,6 +218,10 @@ async def analyze_text(request: AnalysisRequest):
             "description": "Successful chat response",
             "model": ChatResponse
         },
+        401: {
+            "description": "Unauthorized - Invalid or missing token",
+            "model": ErrorResponse
+        },
         422: {
             "description": "Validation error",
             "model": ErrorResponse
@@ -176,7 +232,10 @@ async def analyze_text(request: AnalysisRequest):
         }
     }
 )
-async def chat_with_therapist(request: ChatRequest):
+async def chat_with_therapist(
+    request: ChatRequest,
+    user_id: str = Depends(get_current_user_id)
+):
     """
     Have a conversation with the AI therapist for personalized mental health support.
     
@@ -197,7 +256,7 @@ async def chat_with_therapist(request: ChatRequest):
         HTTPException: 422 for validation errors, 500 for processing errors
     """
     try:
-        logger.info(f"Received chat request (message length: {len(request.message)} chars)")
+        logger.info(f"Received chat request from user {user_id} (message length: {len(request.message)} chars)")
         
         # Assess crisis level
         crisis_assessment = ai_therapist.assess_crisis_level(request.message)

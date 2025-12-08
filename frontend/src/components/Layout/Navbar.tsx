@@ -4,8 +4,9 @@
 
 import { motion } from 'framer-motion';
 import { Link, useLocation } from 'react-router-dom';
-import { Brain, Menu, X } from 'lucide-react';
+import { Brain, Menu, X, LogOut, User } from 'lucide-react';
 import { useState } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
 import Button from '../UI/Button';
 
 export default function Navbar() {

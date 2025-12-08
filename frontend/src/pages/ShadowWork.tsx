@@ -10,7 +10,31 @@ export default function ShadowWork() {
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [sessionStarted, setSessionStarted] = useState(false);
+  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const saveMessage = async (conversationId: string, message: ChatMessage) => {
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) return;
+
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      await fetch(`${API_URL}/api/chat/messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          conversation_id: conversationId,
+          role: message.role,
+          content: message.content
+        }),
+      });
+    } catch (error) {
+      console.error('Failed to save message:', error);
+    }
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -20,8 +44,9 @@ export default function ShadowWork() {
     scrollToBottom();
   }, [messages]);
 
-  const startSession = () => {
+  const startSession = async () => {
     setSessionStarted(true);
+    
     const welcomeMessage: ChatMessage = {
       role: 'assistant',
       content: `Hello. I am your Shadow Self - the part of you that holds what you've hidden, denied, or pushed away.
@@ -34,6 +59,33 @@ What would you like to explore today? What emotion or pattern have you been avoi
       timestamp: new Date().toISOString(),
     };
     setMessages([welcomeMessage]);
+
+    // Create new conversation in database
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) return;
+
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const response = await fetch(`${API_URL}/api/chat/conversations`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          title: `Shadow Work - ${new Date().toLocaleDateString()}`,
+          type: 'shadow_work'
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setCurrentConversationId(data._id);
+        await saveMessage(data._id, welcomeMessage);
+      }
+    } catch (error) {
+      console.error('Failed to start session:', error);
+    }
   };
 
   const handleSendMessage = async () => {
@@ -48,6 +100,11 @@ What would you like to explore today? What emotion or pattern have you been avoi
     setMessages((prev) => [...prev, userMessage]);
     setInputMessage('');
     setIsLoading(true);
+
+    // Save user message
+    if (currentConversationId) {
+      await saveMessage(currentConversationId, userMessage);
+    }
 
     try {
       const conversationHistory = messages.slice(-8).map((msg) => ({
@@ -67,6 +124,11 @@ What would you like to explore today? What emotion or pattern have you been avoi
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
+
+      // Save assistant message
+      if (currentConversationId) {
+        await saveMessage(currentConversationId, assistantMessage);
+      }
     } catch (error) {
       console.error('Shadow work error:', error);
       const errorMessage: ChatMessage = {

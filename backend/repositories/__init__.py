@@ -1,0 +1,9 @@
+"""
+Repository package for database operations.
+"""
+from .user_repository import UserRepository, user_repository
+
+__all__ = [
+    "UserRepository",
+    "user_repository",
+]

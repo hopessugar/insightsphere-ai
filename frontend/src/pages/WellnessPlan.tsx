@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Card from '../components/UI/Card';
 import Button from '../components/UI/Button';
@@ -322,6 +322,50 @@ export default function WellnessPlan() {
   const [answers, setAnswers] = useState<QuizAnswer[]>([]);
   const [plan, setPlan] = useState<WellnessPlan | null>(null);
   const [multipleSelections, setMultipleSelections] = useState<string[]>([]);
+  const [isLoadingPlan, setIsLoadingPlan] = useState(true);
+  const [isSavingPlan, setIsSavingPlan] = useState(false);
+
+  // Load latest wellness plan from database on mount
+  useEffect(() => {
+    const loadLatestPlan = async () => {
+      try {
+        const token = localStorage.getItem('auth_token');
+        if (!token) {
+          setIsLoadingPlan(false);
+          return;
+        }
+
+        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+        const response = await fetch(`${API_URL}/api/wellness-plans/latest`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data) {
+            // Transform API data to match WellnessPlan interface
+            setPlan({
+              condition: data.quiz_responses.condition,
+              severity: data.quiz_responses.severity,
+              dailySchedule: data.plan.daily_schedule || [],
+              mindExercises: data.plan.mind_exercises || [],
+              lifestyleTips: data.plan.lifestyle_tips || [],
+              weeklyGoals: data.plan.weekly_goals || []
+            });
+            setStep('results');
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load wellness plan:', error);
+      } finally {
+        setIsLoadingPlan(false);
+      }
+    };
+
+    loadLatestPlan();
+  }, []);
 
   const handleStartQuiz = () => {
     setStep('quiz');
@@ -343,7 +387,7 @@ export default function WellnessPlan() {
     }
   };
 
-  const handleAnswer = (answer: string) => {
+  const handleAnswer = async (answer: string) => {
     const currentQ = quizQuestions[currentQuestion];
     
     let finalAnswer = answer;
@@ -364,7 +408,73 @@ export default function WellnessPlan() {
       // Generate plan based on answers
       const generatedPlan = generateWellnessPlan(newAnswers);
       setPlan(generatedPlan);
+      
+      // Save plan to database
+      await savePlanToDatabase(newAnswers, generatedPlan);
+      
       setStep('results');
+    }
+  };
+
+  const savePlanToDatabase = async (quizAnswers: QuizAnswer[], generatedPlan: WellnessPlan) => {
+    try {
+      setIsSavingPlan(true);
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        console.warn('No auth token - plan not saved to database');
+        return;
+      }
+
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      
+      // Transform quiz answers to match API schema
+      const quizResponses: any = {};
+      quizAnswers.forEach((qa, index) => {
+        const questionId = quizQuestions[index].id;
+        switch (questionId) {
+          case 1: quizResponses.condition = qa.answer; break;
+          case 2: quizResponses.duration = qa.answer; break;
+          case 3: quizResponses.severity = parseInt(qa.answer); break;
+          case 4: quizResponses.symptoms = qa.answer.split(', '); break;
+          case 5: quizResponses.worst_time = qa.answer; break;
+          case 6: quizResponses.current_treatment = qa.answer; break;
+          case 7: quizResponses.triggers = qa.answer.split(', '); break;
+          case 8: quizResponses.sleep_quality = qa.answer; break;
+          case 9: quizResponses.activity_level = qa.answer; break;
+          case 10: quizResponses.social_support = qa.answer; break;
+          case 11: quizResponses.coping_strategies = qa.answer.split(', '); break;
+          case 12: quizResponses.time_available = qa.answer; break;
+          case 13: quizResponses.goals = qa.answer.split(', '); break;
+          case 14: quizResponses.preferences = qa.answer.split(', '); break;
+          case 15: quizResponses.barriers = qa.answer.split(', '); break;
+        }
+      });
+
+      const response = await fetch(`${API_URL}/api/wellness-plans`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          quiz_responses: quizResponses,
+          plan: {
+            daily_schedule: generatedPlan.dailySchedule,
+            mind_exercises: generatedPlan.mindExercises,
+            lifestyle_tips: generatedPlan.lifestyleTips,
+            weekly_goals: generatedPlan.weeklyGoals
+          }
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        console.error('Failed to save wellness plan:', error);
+      }
+    } catch (error) {
+      console.error('Failed to save wellness plan:', error);
+    } finally {
+      setIsSavingPlan(false);
     }
   };
 
@@ -994,6 +1104,18 @@ export default function WellnessPlan() {
     };
     return icons[iconName] || Clock;
   };
+
+  // Loading state
+  if (isLoadingPlan) {
+    return (
+      <div className="min-h-screen pt-20 pb-12 px-4 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto"></div>
+          <p className="mt-4 text-gray-400">Loading your wellness plan...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen pt-20 pb-12 px-4">
